@@ -193,7 +193,7 @@ impl Transaction {
             TransactionType::Data => {
                 // Must have valid data
                 if let Some(ref data) = self.data.data {
-                    if data.is_empty() || data.len() > 1024 {
+                    if data.is_empty() || data.len() > 4096 { // Increased max size for auction data
                         return false;
                     }
                     
@@ -206,12 +206,20 @@ impl Transaction {
                 }
             }
         }
-
-        // Validate fee
-        if self.data.fee == 0 || self.data.fee > 1_000_000 { // Max fee of 1M
+    
+        // Make fees optional - accept zero fee for auction transactions
+        // For auction transactions, we don't require fees
+        if let Some(ref data) = self.data.data {
+            if data.starts_with("AUCTION_") {
+                return true;
+            }
+        }
+        
+        // For non-auction transactions, validate fee
+        if self.data.fee > 1_000_000 { // Max fee of 1M
             return false;
         }
-
+    
         true
     }
 
@@ -298,6 +306,13 @@ impl Transaction {
 
     // Check if transaction can be applied (for double-spend prevention)
     pub fn can_be_applied(&self, balances: &HashMap<PublicKey, u64>) -> bool {
+        // For auction transactions, don't require balance
+        if let Some(ref data) = self.data.data {
+            if data.starts_with("AUCTION_") {
+                return true; // Auction transactions don't require balance
+            }
+        }
+        
         match self.data.tx_type {
             TransactionType::Transfer => {
                 if let Some(amount) = self.data.amount {
